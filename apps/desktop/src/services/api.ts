@@ -126,3 +126,81 @@ export async function createGmailDraft(
   return await res.json();
 }
 
+export async function getAiConfig(): Promise<import('../types/jarvis').AiConfig> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { configured: false, model: 'llama-3.3-70b-versatile' };
+  } catch {
+    return { configured: false, model: 'llama-3.3-70b-versatile' };
+  }
+}
+
+export async function saveAiConfig(apiKey: string, model?: string): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ apiKey, model }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to save AI configuration');
+  }
+}
+
+export async function summarizeEmail(
+  from: string,
+  subject: string,
+  snippet: string
+): Promise<import('../types/jarvis').EmailAiSummary> {
+  const res = await fetch(`${BACKEND_URL}/api/ai/summarize`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ from, subject, snippet }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'AI summarization failed');
+  }
+  return await res.json();
+}
+
+export async function generateAiDraft(
+  from: string,
+  subject: string,
+  snippet: string,
+  guidance?: string
+): Promise<string> {
+  const res = await fetch(`${BACKEND_URL}/api/ai/draft-reply`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ from, subject, snippet, guidance }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'AI draft generation failed');
+  }
+  const data = await res.json();
+  return data.draft;
+}
+
+export async function sendChatPrompt(prompt: string): Promise<string> {
+  const res = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'AI assistant failed to respond');
+  }
+  const data = await res.json();
+  return data.reply;
+}
+
+

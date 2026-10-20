@@ -22,13 +22,18 @@ import {
   Moon,
   Loader2,
 } from 'lucide-react';
-import { AssistantState, HealthResponse, ActivityItem, GoogleAuthStatus, EmailSummary } from '../types/jarvis';
+import { AssistantState, HealthResponse, ActivityItem, GoogleAuthStatus, EmailSummary, AiConfig, EmailAiSummary } from '../types/jarvis';
 import {
   getGoogleAuthStatus,
   getGoogleAuthUrl,
   disconnectGoogle,
   getRecentEmails,
   createGmailDraft,
+  getAiConfig,
+  saveAiConfig,
+  summarizeEmail,
+  generateAiDraft,
+  sendChatPrompt,
 } from '../services/api';
 
 type PanelView = 'home' | 'briefing' | 'draft' | 'calendar_preview' | 'drive_preview' | 'settings';
@@ -68,6 +73,15 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
+
+  // Groq AI state
+  const [aiConfig, setAiConfig] = useState<AiConfig>({ configured: false, model: 'llama-3.3-70b-versatile' });
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [keySavedMessage, setKeySavedMessage] = useState<string | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, EmailAiSummary>>({});
+  const [summarizingId, setSummarizingId] = useState<string | null>(null);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const [activities, setActivities] = useState<ActivityItem[]>([
     {
@@ -131,8 +145,21 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
     }
   };
 
+  const loadAiConfig = async () => {
+    try {
+      const config = await getAiConfig();
+      setAiConfig(config);
+      if (config.maskedApiKey) {
+        setGroqApiKey(config.maskedApiKey);
+      }
+    } catch (e) {
+      console.error('Failed to load AI config:', e);
+    }
+  };
+
   useEffect(() => {
     loadGoogleStatus();
+    loadAiConfig();
   }, []);
 
   const handleConnectGoogle = async () => {
@@ -198,15 +225,72 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
     }
   };
 
-  const handleSelectEmailForDraft = (email: EmailSummary) => {
+  const handleSaveGroqKey = async () => {
+    if (!groqApiKey.trim() || groqApiKey.includes('••••')) return;
+    setIsSavingKey(true);
+    setKeySavedMessage(null);
+    try {
+      await saveAiConfig(groqApiKey.trim(), aiConfig.model);
+      const updated = await getAiConfig();
+      setAiConfig(updated);
+      setKeySavedMessage('API Key saved securely');
+      setTimeout(() => setKeySavedMessage(null), 3000);
+      setActivities((prev) => [
+        {
+          id: `act-${Date.now()}`,
+          title: 'Groq AI configured',
+          timestamp: 'Just now',
+          status: 'success',
+          category: 'system',
+          description: `Active model: ${updated.model}`,
+        },
+        ...prev,
+      ]);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save Groq API key');
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
+
+  const handleSummarizeEmail = async (email: EmailSummary) => {
+    setSummarizingId(email.id);
+    try {
+      const summary = await summarizeEmail(email.from, email.subject, email.snippet);
+      setSummaries((prev) => ({ ...prev, [email.id]: summary }));
+    } catch (err: any) {
+      alert(err.message || 'Failed to summarize email with Groq');
+    } finally {
+      setSummarizingId(null);
+    }
+  };
+
+  const handleSelectEmailForDraft = async (email: EmailSummary) => {
     setDraftTo(email.from);
     setDraftSubject(`Re: ${email.subject.replace(/^Re:\s*/i, '')}`);
     setDraftThreadId(email.threadId);
-    setDraftBody(
-      `Hi,\n\nThank you for reaching out regarding "${email.subject}".\n\nI have received your message and will review the details shortly.\n\nBest regards,\nHimanshu`
-    );
     setDraftNotice(null);
     setCurrentView('draft');
+
+    if (aiConfig.configured) {
+      setIsGeneratingDraft(true);
+      setDraftBody('Generating AI draft with llama-3.3-70b-versatile…');
+      try {
+        const aiDraft = await generateAiDraft(email.from, email.subject, email.snippet);
+        setDraftBody(aiDraft);
+      } catch (e) {
+        console.error('Failed to generate AI draft:', e);
+        setDraftBody(
+          `Hi,\n\nThank you for reaching out regarding "${email.subject}".\n\nI have received your message and will review the details shortly.\n\nBest regards,\nHimanshu`
+        );
+      } finally {
+        setIsGeneratingDraft(false);
+      }
+    } else {
+      setDraftBody(
+        `Hi,\n\nThank you for reaching out regarding "${email.subject}".\n\nI have received your message and will review the details shortly.\n\nBest regards,\nHimanshu`
+      );
+    }
   };
 
   const handleSaveDraft = async () => {
@@ -284,19 +368,43 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
       setCurrentView('drive_preview');
     }
 
-    const newActivity: ActivityItem = {
+    const promptText = inputValue.trim();
+    setInputValue('');
+
+    const userActivity: ActivityItem = {
       id: `act-${Date.now()}`,
-      title: `Prompt: "${inputValue}"`,
+      title: `Prompt: "${promptText}"`,
       timestamp: 'Just now',
       status: isBackendUp ? 'success' : 'failed',
       category: 'system',
-      description: isBackendUp
-        ? 'Processed by local execution pipeline.'
-        : 'Backend offline at 127.0.0.1:48765.',
+      description: isBackendUp ? 'Processing query…' : 'Backend offline at 127.0.0.1:48765.',
     };
 
-    setActivities([newActivity, ...activities]);
-    setInputValue('');
+    setActivities((prev) => [userActivity, ...prev]);
+
+    if (aiConfig.configured && isBackendUp) {
+      setChatLoading(true);
+      sendChatPrompt(promptText)
+        .then((reply) => {
+          setActivities((prev) => [
+            {
+              id: `act-${Date.now()}`,
+              title: 'JARVIS AI',
+              timestamp: 'Just now',
+              status: 'success',
+              category: 'system',
+              description: reply,
+            },
+            ...prev,
+          ]);
+        })
+        .catch((err) => {
+          console.error('Chat error:', err);
+        })
+        .finally(() => {
+          setChatLoading(false);
+        });
+    }
   };
 
   return (
@@ -1031,6 +1139,62 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
                       {email.snippet}
                     </p>
 
+                    {/* AI Summarization Box */}
+                    {summaries[email.id] && (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: 'var(--color-bg-base)',
+                          border: '1px solid rgba(100, 255, 218, 0.25)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              color: 'var(--color-accent)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <Sparkles size={11} />
+                            <span>AI Intelligence Brief</span>
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 600,
+                              color: summaries[email.id].urgency === 'HIGH' ? 'var(--color-warning)' : 'var(--color-accent)',
+                            }}
+                          >
+                            {summaries[email.id].urgency} PRIORITY
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', lineHeight: 1.45 }}>
+                          {summaries[email.id].summary}
+                        </div>
+
+                        {summaries[email.id].keyDates && summaries[email.id].keyDates.length > 0 && (
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                            Dates: <span style={{ color: 'var(--color-accent)', fontWeight: 500 }}>{summaries[email.id].keyDates.join(', ')}</span>
+                          </div>
+                        )}
+
+                        {summaries[email.id].actionRequired && (
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                            Next step: <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{summaries[email.id].actionRequired}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div
                       style={{
                         display: 'flex',
@@ -1045,6 +1209,33 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
                       </span>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {aiConfig.configured && (
+                          <button
+                            onClick={() => handleSummarizeEmail(email)}
+                            disabled={summarizingId === email.id}
+                            style={{
+                              height: '26px',
+                              padding: '0 8px',
+                              borderRadius: '7px',
+                              backgroundColor: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-accent)',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              cursor: summarizingId === email.id ? 'wait' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            {summarizingId === email.id ? (
+                              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <Sparkles size={11} />
+                            )}
+                            <span>AI Brief</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => openExternalUrl(`https://mail.google.com/mail/u/0/#inbox/${email.id}`)}
                           style={{
@@ -1264,6 +1455,25 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
             </div>
 
             {/* Recipient & Subject Fields (Section 8.1) */}
+            {isGeneratingDraft && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-accent-soft)',
+                  border: '1px solid rgba(100, 255, 218, 0.3)',
+                  fontSize: '11px',
+                  color: 'var(--color-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>LLaMA 3.3 is composing an intelligent reply draft…</span>
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div
                 style={{
@@ -1685,42 +1895,99 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
                     Groq AI Provider
                   </span>
                 </div>
-                <span style={{ fontSize: '10px', color: 'var(--color-accent)' }}>llama-3.3-70b-versatile</span>
+                {aiConfig.configured ? (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      color: 'var(--color-success)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-success)' }} />
+                    Active ({aiConfig.model})
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '10px', color: 'var(--color-accent)' }}>llama-3.3-70b-versatile</span>
+                )}
               </div>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showGroqKey ? 'text' : 'password'}
-                  value={groqApiKey}
-                  onChange={(e) => setGroqApiKey(e.target.value)}
-                  placeholder="gsk_••••••••••••••••••••••••"
-                  style={{
-                    width: '100%',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    color: 'var(--color-text-primary)',
-                    fontSize: '11px',
-                    padding: '0 32px 0 10px',
-                    outline: 'none',
-                  }}
-                />
+
+              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                Provides fast LLaMA 3.3 inference for email summarization, draft generation, and smart chat.
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type={showGroqKey ? 'text' : 'password'}
+                    value={groqApiKey}
+                    onChange={(e) => setGroqApiKey(e.target.value)}
+                    placeholder="gsk_••••••••••••••••••••••••"
+                    style={{
+                      width: '100%',
+                      height: '32px',
+                      borderRadius: '6px',
+                      backgroundColor: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      color: 'var(--color-text-primary)',
+                      fontSize: '11px',
+                      padding: '0 32px 0 10px',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGroqKey(!showGroqKey)}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showGroqKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => setShowGroqKey(!showGroqKey)}
+                  onClick={handleSaveGroqKey}
+                  disabled={isSavingKey || !groqApiKey.trim() || groqApiKey.includes('••••')}
                   style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '8px',
-                    background: 'transparent',
+                    height: '32px',
+                    padding: '0 12px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--color-accent)',
                     border: 'none',
-                    color: 'var(--color-text-muted)',
-                    cursor: 'pointer',
+                    color: '#0D1117',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: (isSavingKey || !groqApiKey.trim() || groqApiKey.includes('••••')) ? 'not-allowed' : 'pointer',
+                    opacity: (!groqApiKey.trim() || groqApiKey.includes('••••')) ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {showGroqKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                  {isSavingKey ? (
+                    <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <Check size={12} />
+                  )}
+                  <span>Save Key</span>
                 </button>
               </div>
+
+              {keySavedMessage && (
+                <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 500 }}>
+                  ✓ {keySavedMessage}
+                </span>
+              )}
             </div>
 
             {/* Local Security & DB */}
@@ -1787,7 +2054,8 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Ask JARVIS…"
+          placeholder={chatLoading ? 'JARVIS is thinking…' : (aiConfig.configured ? 'Ask JARVIS anything…' : 'Ask JARVIS (Set Groq key in Settings for AI)…')}
+          disabled={chatLoading}
           style={{
             flex: 1,
             height: '38px',
@@ -1798,29 +2066,34 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
             fontSize: '13px',
             padding: '0 14px',
             outline: 'none',
+            opacity: chatLoading ? 0.7 : 1,
           }}
         />
 
         {/* Send Button: 34x34 with 10px radius, accent fill, crisp upward arrow */}
         <button
           type="submit"
-          disabled={!inputValue.trim()}
+          disabled={!inputValue.trim() || chatLoading}
           title="Send"
           style={{
             width: '34px',
             height: '34px',
             borderRadius: '10px',
             border: 'none',
-            backgroundColor: inputValue.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+            backgroundColor: inputValue.trim() && !chatLoading ? 'var(--color-accent)' : 'var(--color-border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: inputValue.trim() ? '#0D1117' : 'var(--color-text-muted)',
-            cursor: inputValue.trim() ? 'pointer' : 'default',
+            color: inputValue.trim() && !chatLoading ? '#0D1117' : 'var(--color-text-muted)',
+            cursor: inputValue.trim() && !chatLoading ? 'pointer' : 'default',
             transition: 'background-color 0.15s ease',
           }}
         >
-          <ArrowUp size={16} strokeWidth={2.5} />
+          {chatLoading ? (
+            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+          ) : (
+            <ArrowUp size={16} strokeWidth={2.5} />
+          )}
         </button>
       </form>
     </div>

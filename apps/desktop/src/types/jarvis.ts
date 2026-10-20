@@ -45,3 +45,17 @@ export interface DraftResponse {
   to: string;
   subject: string;
 }
+
+export interface AiConfig {
+  configured: boolean;
+  model: string;
+  maskedApiKey?: string;
+}
+
+export interface EmailAiSummary {
+  summary: string;
+  urgency: 'HIGH' | 'NORMAL' | 'LOW';
+  actionRequired: string;
+  keyDates: string[];
+  senderIntent: string;
+}
