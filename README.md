@@ -131,7 +131,7 @@ npm run tauri dev
                  ▼
 ┌──────────────────────────────────────┐
 │  Spring Boot Local Service           │
-│  Gmail adapter · Groq AI provider   │
+│  Gmail adapter · Groq AI provider    │
 │  OAuth handler · SQLite · Scheduler  │
 └──────┬──────────────────┬────────────┘
        │                  │
@@ -191,5 +191,5 @@ Contributions are welcome. JARVIS is designed with a modular architecture so new
 ---
 
 <div align="center">
-  <sub>Built by <a href="https://github.com/YOUR_USERNAME">YOUR_NAME</a> · Inspired by the idea that a good assistant stays out of your way until you need it.</sub>
+  <sub>Built by <a href="https://github.com/ftthimanshuu">Himanshu</a> · Inspired by the idea that a good assistant stays out of your way until you need it.</sub>
 </div>
