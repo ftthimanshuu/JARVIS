@@ -29,7 +29,7 @@ public class GroqService {
     private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String SETTING_KEY_GROQ = "groq_api_key";
     private static final String SETTING_KEY_MODEL = "groq_model";
-    public static final String DEFAULT_MODEL = "llama-3.3-70b-versatile";
+    public static final String DEFAULT_MODEL = "openai/gpt-oss-120b";
 
     private final AppSettingRepository settingRepository;
     private final ObjectMapper objectMapper;

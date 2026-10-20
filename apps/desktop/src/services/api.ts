@@ -135,9 +135,9 @@ export async function getAiConfig(): Promise<import('../types/jarvis').AiConfig>
     if (res.ok) {
       return await res.json();
     }
-    return { configured: false, model: 'llama-3.3-70b-versatile' };
+    return { configured: false, model: 'openai/gpt-oss-120b' };
   } catch {
-    return { configured: false, model: 'llama-3.3-70b-versatile' };
+    return { configured: false, model: 'openai/gpt-oss-120b' };
   }
 }
 

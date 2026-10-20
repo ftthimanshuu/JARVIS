@@ -75,7 +75,7 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
 
   // Groq AI state
-  const [aiConfig, setAiConfig] = useState<AiConfig>({ configured: false, model: 'llama-3.3-70b-versatile' });
+  const [aiConfig, setAiConfig] = useState<AiConfig>({ configured: false, model: 'openai/gpt-oss-120b' });
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySavedMessage, setKeySavedMessage] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Record<string, EmailAiSummary>>({});
@@ -274,7 +274,7 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
 
     if (aiConfig.configured) {
       setIsGeneratingDraft(true);
-      setDraftBody('Generating AI draft with llama-3.3-70b-versatile…');
+      setDraftBody(`Generating AI draft with ${aiConfig.model || 'Groq AI'}…`);
       try {
         const aiDraft = await generateAiDraft(email.from, email.subject, email.snippet);
         setDraftBody(aiDraft);
@@ -1910,12 +1910,12 @@ export const ExpandedPanel: FC<ExpandedPanelProps> = ({
                     Active ({aiConfig.model})
                   </span>
                 ) : (
-                  <span style={{ fontSize: '10px', color: 'var(--color-accent)' }}>llama-3.3-70b-versatile</span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-accent)' }}>openai/gpt-oss-120b</span>
                 )}
               </div>
 
               <p style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                Provides fast LLaMA 3.3 inference for email summarization, draft generation, and smart chat.
+                Provides ultra-fast Groq AI inference for email summarization, draft generation, and smart chat.
               </p>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
