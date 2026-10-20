@@ -29,7 +29,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health", "/api/health").permitAll()
+                .requestMatchers("/actuator/health", "/api/health", "/api/auth/google/callback").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(startupTokenFilter, UsernamePasswordAuthenticationFilter.class);

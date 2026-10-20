@@ -1,5 +1,5 @@
 import { FC, MouseEvent } from 'react';
-import { ChevronDown, AlertCircle, Loader2, GripVertical } from 'lucide-react';
+import { ChevronDown, GripVertical } from 'lucide-react';
 import { AssistantState, HealthResponse } from '../types/jarvis';
 
 interface FloatingPillProps {
@@ -15,6 +15,7 @@ export const FloatingPill: FC<FloatingPillProps> = ({
 }) => {
   const isBackendUp = backendHealth?.status === 'UP';
 
+  // Native window drag via Tauri
   const handleStartDrag = async (e: MouseEvent) => {
     if (e.button === 0) {
       try {
@@ -26,20 +27,20 @@ export const FloatingPill: FC<FloatingPillProps> = ({
     }
   };
 
-  const getStateColor = () => {
-    if (!isBackendUp && backendHealth !== null) return 'var(--danger)';
+  const getRingColor = () => {
+    if (!isBackendUp && backendHealth !== null) return 'var(--color-danger)';
     switch (state) {
       case 'working':
-        return 'var(--accent)';
+        return 'var(--color-accent)';
       case 'needs_approval':
-        return 'var(--warning)';
+        return 'var(--color-warning)';
       case 'error':
-        return 'var(--danger)';
+        return 'var(--color-danger)';
       case 'connecting':
-        return 'var(--text-muted)';
+        return 'var(--color-text-muted)';
       case 'ready':
       default:
-        return 'var(--accent)';
+        return 'var(--color-accent)';
     }
   };
 
@@ -49,7 +50,7 @@ export const FloatingPill: FC<FloatingPillProps> = ({
       case 'working':
         return 'Working...';
       case 'needs_approval':
-        return 'Approval Needed';
+        return 'Needs approval';
       case 'error':
         return 'Attention';
       case 'connecting':
@@ -71,147 +72,127 @@ export const FloatingPill: FC<FloatingPillProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         width: '310px',
-        height: '46px',
-        padding: '0 10px 0 8px',
-        borderRadius: 'var(--radius-pill)',
-        backgroundColor: 'rgba(21, 27, 35, 0.96)',
-        border: '1px solid var(--border-subtle)',
-        boxShadow: 'var(--shadow-pill)',
-        backdropFilter: 'blur(16px)',
+        height: '56px',
+        padding: '0 14px 0 8px',
+        borderRadius: '9999px',
+        backgroundColor: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        boxShadow: 'none',
         cursor: 'pointer',
+        boxSizing: 'border-box',
+        outline: 'none',
         transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}
     >
-      {/* Left: Drag Grip & Brand */}
+      {/* ─── Left Section: Grip + Hollow Ring + Brand ─── */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: '10px',
         }}
       >
-        {/* Dedicated Drag Handle */}
+        {/* Dedicated Drag Grip Handle */}
         <div
           data-tauri-drag-region
           onMouseDown={handleStartDrag}
           onPointerDown={handleStartDrag}
           onClick={(e) => e.stopPropagation()}
-          title="Drag to move JARVIS"
+          title="Drag to reposition JARVIS"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'grab',
             padding: '4px 2px',
-            color: 'var(--text-muted)',
+            color: 'var(--color-text-muted)',
             borderRadius: '4px',
-            transition: 'color 0.15s ease',
+            opacity: 0.6,
+            transition: 'opacity 0.15s ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; }}
         >
           <GripVertical size={14} />
         </div>
 
-        {/* Status Indicator & Mark (also draggable) */}
+        {/* Hollow Status Ring (Cortana-style per Section 5.1 of UI/UX Spec v2) */}
+        <div
+          data-tauri-drag-region
+          onMouseDown={handleStartDrag}
+          onPointerDown={handleStartDrag}
+          style={{
+            position: 'relative',
+            width: '30px',
+            height: '30px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'grab',
+          }}
+        >
+          <svg viewBox="0 0 30 30" width="30" height="30" aria-hidden="true" style={{ display: 'block' }}>
+            <circle
+              cx="15"
+              cy="15"
+              r="12"
+              fill="none"
+              stroke={getRingColor()}
+              strokeWidth="2.8"
+              className={state === 'working' ? 'spin-working' : ''}
+              strokeDasharray={state === 'working' ? '40 25' : 'none'}
+              style={{ transition: 'stroke 0.25s ease' }}
+            />
+          </svg>
+        </div>
+
+        {/* Wordmark & State Label (Figma reference: JARVIS 15px Semi Bold, label 11px) */}
         <div
           data-tauri-drag-region
           onMouseDown={handleStartDrag}
           onPointerDown={handleStartDrag}
           style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            flexDirection: 'column',
+            justifyContent: 'center',
             cursor: 'grab',
           }}
         >
-          <div
-            style={{
-              position: 'relative',
-              width: '18px',
-              height: '18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {state === 'working' ? (
-              <Loader2
-                size={16}
-                className="spin-working"
-                style={{ color: getStateColor() }}
-              />
-            ) : (
-              <>
-                <div
-                  style={{
-                    width: '9px',
-                    height: '9px',
-                    borderRadius: '50%',
-                    backgroundColor: getStateColor(),
-                    boxShadow: `0 0 8px ${getStateColor()}`,
-                  }}
-                />
-                {state === 'ready' && isBackendUp && (
-                  <div
-                    className="pulse-ring"
-                    style={{
-                      position: 'absolute',
-                      width: '16px',
-                      height: '16px',
-                      borderRadius: '50%',
-                      border: `1.5px solid ${getStateColor()}`,
-                      opacity: 0.6,
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </div>
-
           <span
             data-tauri-drag-region
             style={{
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              color: 'var(--text-primary)',
+              fontSize: '15px',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              color: 'var(--color-text-primary)',
+              lineHeight: 1.15,
             }}
           >
             JARVIS
           </span>
+          <span
+            data-tauri-drag-region
+            style={{
+              fontSize: '11px',
+              fontWeight: 400,
+              color: 'var(--color-text-muted)',
+              lineHeight: 1.2,
+            }}
+          >
+            {getStateLabel()}
+          </span>
         </div>
       </div>
 
-      {/* State Badge & Chevron */}
+      {/* ─── Right Section: Subtle Expand Affordance ─── */}
       <div
-        data-tauri-drag-region
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
         }}
       >
-        <span
-          style={{
-            fontSize: '11px',
-            fontWeight: 500,
-            padding: '2px 8px',
-            borderRadius: '9999px',
-            backgroundColor: 'rgba(255, 255, 255, 0.04)',
-            color: getStateColor(),
-            border: `1px solid ${getStateColor()}25`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}
-        >
-          {(!isBackendUp && backendHealth !== null) && <AlertCircle size={10} />}
-          {getStateLabel()}
-        </span>
-
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -219,26 +200,26 @@ export const FloatingPill: FC<FloatingPillProps> = ({
           }}
           aria-label="Expand JARVIS panel"
           style={{
-            width: '26px',
-            height: '26px',
+            width: '24px',
+            height: '24px',
             borderRadius: '50%',
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            backgroundColor: 'rgba(255, 255, 255, 0.04)',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--text-secondary)',
+            color: 'var(--color-text-muted)',
             cursor: 'pointer',
             padding: 0,
             transition: 'background-color 0.15s ease, color 0.15s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)';
-            e.currentTarget.style.color = 'var(--text-primary)';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.color = 'var(--color-text-primary)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
-            e.currentTarget.style.color = 'var(--text-secondary)';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+            e.currentTarget.style.color = 'var(--color-text-muted)';
           }}
         >
           <ChevronDown size={14} />

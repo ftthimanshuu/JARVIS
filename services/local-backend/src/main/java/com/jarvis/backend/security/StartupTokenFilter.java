@@ -36,8 +36,8 @@ public class StartupTokenFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // Allow health check without token (Tauri polls this before token is wired)
-        if (path.startsWith("/actuator/health") || path.equals("/api/health")) {
+        // Allow health check and Google callback without token
+        if (path.startsWith("/actuator/health") || path.equals("/api/health") || path.equals("/api/auth/google/callback")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -45,9 +45,18 @@ public class StartupTokenFilter extends OncePerRequestFilter {
         String token = request.getHeader(TOKEN_HEADER);
         if (expectedToken == null || !expectedToken.equals(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("{\"error\":\"Unauthorized\"}");
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"Unauthorized: invalid or missing X-JARVIS-Token\"}");
             return;
         }
+
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.web.authentication.preauth.PreAuthenticatedAuthenticationToken(
+                        "jarvis-desktop",
+                        token,
+                        java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CLIENT"))
+                )
+        );
 
         filterChain.doFilter(request, response);
     }

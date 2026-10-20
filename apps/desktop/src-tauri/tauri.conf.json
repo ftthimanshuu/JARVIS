@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "JARVIS",
-        "width": 320,
-        "height": 60,
+        "width": 310,
+        "height": 56,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

@@ -11,6 +11,11 @@ if (-not (Test-Path $mvn)) {
     $mvn = "mvn"
 }
 
+$jarvisDir = Join-Path $env:USERPROFILE ".jarvis"
+if (-not (Test-Path $jarvisDir)) {
+    New-Item -ItemType Directory -Path $jarvisDir -Force | Out-Null
+}
+
 Push-Location $backendDir
 try {
     & $mvn spring-boot:run

@@ -18,9 +18,9 @@ export function App() {
       const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
       const win = getCurrentWindow();
       if (expanded) {
-        await win.setSize(new LogicalSize(400, 580));
+        await win.setSize(new LogicalSize(460, 560));
       } else {
-        await win.setSize(new LogicalSize(300, 46));
+        await win.setSize(new LogicalSize(310, 56));
       }
     } catch {
       // Safe fallback when running in browser dev mode
@@ -64,8 +64,8 @@ export function App() {
     <div
       style={{
         display: 'inline-block',
-        width: isExpanded ? '400px' : '300px',
-        height: isExpanded ? '580px' : '46px',
+        width: isExpanded ? '460px' : '310px',
+        height: isExpanded ? '560px' : '56px',
         backgroundColor: 'transparent',
         transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
