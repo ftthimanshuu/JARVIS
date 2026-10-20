@@ -1,20 +1,3 @@
-# GitHub Repo Description (one-liner — paste this in the "About" section on GitHub)
-
-```
-An open-source, floating desktop AI assistant for Windows — summarizes Gmail, drafts replies, and stays out of your way.
-```
-
----
----
-
-# README.md (paste this as your repo's README)
-
----
-
-<div align="center">
-
-<img src="docs/assets/jarvis-logo.png" alt="JARVIS Logo" width="80" />
-
 # JARVIS
 
 **Open-source desktop AI assistant with a floating Dynamic Island-inspired UI**
